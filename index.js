@@ -6,11 +6,17 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server"
 const app = express();
 app.use(express.json());
 
+/**
+ * MCP Server
+ */
 const server = new McpServer({
   name: "study-planner-mcp",
   version: "1.0.0",
 });
 
+/**
+ * Tool: get_curriculum
+ */
 server.tool(
   "get_curriculum",
   {
@@ -21,27 +27,36 @@ server.tool(
       content: [
         {
           type: "text",
-          text: `Curriculum for ${yearId}: Math, Arabic, English`,
+          text: `📚 Curriculum for ${yearId}: Math, Arabic, English`,
         },
       ],
     };
   }
 );
 
+/**
+ * MCP HTTP transport
+ */
 const transport = new StreamableHTTPServerTransport({
   endpoint: "/mcp",
 });
 
+/**
+ * Routes
+ */
 app.get("/", (_req, res) => {
-  res.send("MCP server running");
+  res.send("Study Planner MCP running ✅");
 });
 
-app.all("/mcp", async (req, res) => {
+app.post("/mcp", async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-const port = process.env.PORT || 8080;
-app.listen(port, "0.0.0.0", async () => {
-  console.log("Listening on", port);
+/**
+ * Start server
+ */
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, "0.0.0.0", async () => {
+  console.log(`🚀 Server listening on ${PORT}`);
   await server.connect(transport);
 });
