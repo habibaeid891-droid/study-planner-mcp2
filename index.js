@@ -26,6 +26,49 @@ server.tool(
     };
   }
 );
+server.tool(
+  "generate_schedule_preview",
+  {
+    daysPerWeek: z.number().int().min(1).max(7),
+    lessonsPerDay: z.number().int().min(1).max(5),
+  },
+  async ({ daysPerWeek, lessonsPerDay }) => {
+    const schedule = [];
+
+    let lessonCounter = 1;
+
+    for (let day = 1; day <= daysPerWeek; day++) {
+      const dayLessons = [];
+
+      for (let i = 0; i < lessonsPerDay; i++) {
+        dayLessons.push({
+          lessonId: `lesson_${lessonCounter}`,
+          title: `درس رقم ${lessonCounter}`,
+        });
+        lessonCounter++;
+      }
+
+      schedule.push({
+        day,
+        lessons: dayLessons,
+      });
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: "📅 تم إنشاء جدول مبدئي (Preview)",
+        },
+      ],
+      structuredContent: {
+        daysPerWeek,
+        lessonsPerDay,
+        schedule,
+      },
+    };
+  }
+);
 
 /** Transport */
 const transport = new StreamableHTTPServerTransport({});
@@ -52,3 +95,4 @@ app.listen(port, "0.0.0.0", () => {
 server.connect(transport).then(() => {
   console.log("MCP connected ✅");
 });
+
