@@ -108,9 +108,7 @@ server.tool(
 );
 
 /** 5) Transport */
-const transport = new StreamableHTTPServerTransport({
-  // يمكن إضافة خيارات إضافية هنا إذا لزم الأمر
-});
+const transport = new StreamableHTTPServerTransport({});
 
 /** 6) Routes */
 app.get("/", (_req, res) => res.status(200).send("HELLO FROM CLOUD RUN"));
@@ -128,18 +126,33 @@ app.all("/mcp", async (req, res) => {
   }
 });
 
-/** 7) Listen */
+// **إضافة health check مهمة لـ Cloud Run**
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
+/** 7) Listen - **هذا الجزء تم تصحيحه** */
 const port = Number(process.env.PORT || 8080);
 
-/** 8) Connect MCP */
-server
-  .connect(transport)
-  .then(() => {
+// **الترتيب الصحيح**: الاتصال بـ MCP أولاً، ثم تشغيل السيرفر
+async function startServer() {
+  try {
+    // 1. الاتصال بـ MCP أولاً
+    await server.connect(transport);
     console.log("MCP server connected ✅");
     
-    // تشغيل السيرفر بعد الاتصال بـ MCP
+    // 2. ثم تشغيل Express server
     app.listen(port, "0.0.0.0", () => {
-      console.log(`Listening on ${port}`);
+      console.log(`Server listening on port ${port}`);
+      console.log(`Health check: http://localhost:${port}/health`);
+      console.log(`MCP endpoint: http://localhost:${port}/mcp`);
     });
-  })
-  .catch((err) => console.error("MCP connect error:", err));
+    
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1); // خروج مع كود خطأ
+  }
+}
+
+// بدء السيرفر
+startServer();
