@@ -9,7 +9,7 @@ app.use(express.json({ limit: "1mb" }));
 /** 1) MCP server */
 const server = new McpServer({ name: "study-planner-mcp", version: "1.0.0" });
 
-/** 2) ✅ Tool بتاعتك فقط */
+/** 2) ✅ Tool  */
 server.tool(
   "get_curriculum",
   { yearid: z.string() },
@@ -25,6 +25,82 @@ server.tool(
         yearid,
         subjects: ["Math", "Arabic", "English"],
       },
+    };
+  }
+);
+server.tool(
+  "load_curriculum",
+  {
+    yearId: z.string(),
+  },
+  async ({ yearId }) => {
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(`curriculums/${yearId}.json`);
+
+    const [exists] = await file.exists();
+    if (!exists) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: "Curriculum file not found" }],
+      };
+    }
+
+    const [buffer] = await file.download();
+    const curriculum = JSON.parse(buffer.toString());
+
+    return {
+      content: [{ type: "text", text: "📘 Curriculum loaded" }],
+      structuredContent: curriculum,
+    };
+  }
+);
+server.tool(
+  "generate_schedule",
+  {
+    curriculum: z.any(),
+    weeks: z.number().int().positive(),
+  },
+  async ({ curriculum, weeks }) => {
+    const schedule = [];
+
+    let lessonIndex = 0;
+    const lessons = curriculum.subjects.flatMap((s) =>
+      s.lessons.map((l) => ({ subject: s.name, lesson: l }))
+    );
+
+    for (let w = 1; w <= weeks; w++) {
+      schedule.push({
+        week: w,
+        lessons: lessons.slice(lessonIndex, lessonIndex + 3),
+      });
+      lessonIndex += 3;
+    }
+
+    return {
+      content: [{ type: "text", text: "📅 Proposed schedule generated" }],
+      structuredContent: {
+        schedule,
+      },
+    };
+  }
+);
+server.tool(
+  "save_schedule",
+  {
+    yearId: z.string(),
+    schedule: z.any(),
+  },
+  async ({ yearId, schedule }) => {
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(`schedules/${yearId}.json`);
+
+    await file.save(JSON.stringify(schedule, null, 2), {
+      contentType: "application/json",
+    });
+
+    return {
+      content: [{ type: "text", text: "✅ Schedule saved" }],
+      structuredContent: { ok: true },
     };
   }
 );
@@ -58,3 +134,4 @@ server
   .connect(transport)
   .then(() => console.log("MCP server connected ✅"))
   .catch((err) => console.error("MCP connect error:", err));
+
