@@ -2,32 +2,26 @@ import express from "express";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { Redis } from "@upstash/redis";
+import admin from "firebase-admin";
+
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
-/** 1) MCP server */
-const server = new McpServer({ name: "study-planner-mcp", version: "1.0.0" });
+/** 🔥 Firebase Admin init */
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    storageBucket: "ai-students-85242.appspot.com",
+  });
+}
 
-/** 2) ✅ Tool  */
-server.tool(
-  "get_curriculum",
-  { yearid: z.string() },
-  async ({ yearid }) => {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `📚 المنهج الدراسي للسنة: ${yearid}\n- Math\n- Arabic\n- English`,
-        },
-      ],
-      structuredContent: {
-        yearid,
-        subjects: ["Math", "Arabic", "English"],
-      },
-    };
-  }
-);
+/** 1) MCP server */
+const server = new McpServer({
+  name: "study-planner-mcp",
+  version: "1.0.0",
+});
+
+/** 2) load curriculum from Firebase Storage */
 server.tool(
   "load_curriculum",
   {
@@ -35,13 +29,13 @@ server.tool(
   },
   async ({ yearId }) => {
     const bucket = admin.storage().bucket();
-    const file = bucket.file(`curriculums/${yearId}.json`);
+    const file = bucket.file(`curriculum_${yearId}.json`);
 
     const [exists] = await file.exists();
     if (!exists) {
       return {
         isError: true,
-        content: [{ type: "text", text: "Curriculum file not found" }],
+        content: [{ type: "text", text: "❌ Curriculum file not found" }],
       };
     }
 
@@ -54,6 +48,8 @@ server.tool(
     };
   }
 );
+
+/** 3) generate schedule (اقتراح فقط) */
 server.tool(
   "generate_schedule",
   {
@@ -63,27 +59,33 @@ server.tool(
   async ({ curriculum, weeks }) => {
     const schedule = [];
 
-    let lessonIndex = 0;
     const lessons = curriculum.subjects.flatMap((s) =>
-      s.lessons.map((l) => ({ subject: s.name, lesson: l }))
+      s.lessons.map((l) => ({
+        subjectId: s.subjectId,
+        subjectName: s.name,
+        lessonId: l.lessonId,
+        title: l.title,
+        estimatedMinutes: l.estimatedMinutes,
+      }))
     );
 
+    let index = 0;
     for (let w = 1; w <= weeks; w++) {
       schedule.push({
         week: w,
-        lessons: lessons.slice(lessonIndex, lessonIndex + 3),
+        lessons: lessons.slice(index, index + 3),
       });
-      lessonIndex += 3;
+      index += 3;
     }
 
     return {
       content: [{ type: "text", text: "📅 Proposed schedule generated" }],
-      structuredContent: {
-        schedule,
-      },
+      structuredContent: { schedule },
     };
   }
 );
+
+/** 4) save approved schedule */
 server.tool(
   "save_schedule",
   {
@@ -92,7 +94,7 @@ server.tool(
   },
   async ({ yearId, schedule }) => {
     const bucket = admin.storage().bucket();
-    const file = bucket.file(`schedules/${yearId}.json`);
+    const file = bucket.file(`schedules/schedule_${yearId}.json`);
 
     await file.save(JSON.stringify(schedule, null, 2), {
       contentType: "application/json",
@@ -105,10 +107,10 @@ server.tool(
   }
 );
 
-/** 3) Transport (زي الشغال عندك) */
+/** 5) Transport */
 const transport = new StreamableHTTPServerTransport({});
 
-/** 4) Routes */
+/** 6) Routes */
 app.get("/", (_req, res) => res.status(200).send("HELLO FROM CLOUD RUN"));
 
 app.all("/mcp", async (req, res) => {
@@ -122,16 +124,15 @@ app.all("/mcp", async (req, res) => {
   }
 });
 
-/** 5) Listen */
+/** 7) Listen */
 const port = Number(process.env.PORT || 8080);
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Listening on ${port}`);
 });
 
-/** 6) Connect MCP */
+/** 8) Connect MCP */
 server
   .connect(transport)
   .then(() => console.log("MCP server connected ✅"))
   .catch((err) => console.error("MCP connect error:", err));
-
