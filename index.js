@@ -93,6 +93,44 @@ server.tool(
     };
   }
 );
+server.tool(
+  "generate_schedule_from_curriculum",
+  {
+    lessonsPerDay: z.number().int().min(1).max(5),
+  },
+  async ({ lessonsPerDay }) => {
+    const allLessons = TEMP_CURRICULUM.subjects.flatMap((s) =>
+      s.lessons.map((l) => ({
+        subject: s.name,
+        lessonId: l.lessonId,
+        title: l.title,
+      }))
+    );
+
+    const schedule = [];
+    let index = 0;
+    let day = 1;
+
+    while (index < allLessons.length) {
+      schedule.push({
+        day,
+        lessons: allLessons.slice(index, index + lessonsPerDay),
+      });
+      index += lessonsPerDay;
+      day++;
+    }
+
+    return {
+      content: [
+        { type: "text", text: "📅 جدول مبدئي مبني على المنهج" }
+      ],
+      structuredContent: {
+        yearId: TEMP_CURRICULUM.yearId,
+        schedule,
+      },
+    };
+  }
+);
 
 /** Transport */
 const transport = new StreamableHTTPServerTransport({});
@@ -119,5 +157,6 @@ app.listen(port, "0.0.0.0", () => {
 server.connect(transport).then(() => {
   console.log("MCP connected ✅");
 });
+
 
 
