@@ -2,9 +2,18 @@ import express from "express";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import admin from "firebase-admin";
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+
+/** 🔥 Firebase init (NO STORAGE) */
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+  });
+  console.log("Firebase initialized ✅");
+}
 
 /** MCP server */
 const server = new McpServer({
@@ -12,19 +21,13 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-/** Tool: load_curriculum (TEMP fake, بس عشان السيرفر يقوم) */
+/** Tool مؤقتة جدًا */
 server.tool(
-  "load_curriculum",
-  { yearId: z.string() },
-  async ({ yearId }) => {
-    return {
-      content: [{ type: "text", text: "📘 Curriculum loaded (TEMP)" }],
-      structuredContent: {
-        yearId,
-        subjects: [],
-      },
-    };
-  }
+  "ping",
+  {},
+  async () => ({
+    content: [{ type: "text", text: "pong 🏓" }],
+  })
 );
 
 /** Transport */
