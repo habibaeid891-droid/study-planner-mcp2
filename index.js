@@ -1,7 +1,7 @@
 import express from "express";
 import { z } from "zod";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
 
 const app = express();
 app.use(express.json());
@@ -52,3 +52,4 @@ app.listen(PORT, () => {
 
 /* ✅ Connect MCP AFTER server setup */
 await server.connect(transport);
+
