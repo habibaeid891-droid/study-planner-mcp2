@@ -1,69 +1,60 @@
 import express from "express";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { HTTPServerTransport } from "@modelcontextprotocol/sdk/server/http.js";
-
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { Redis } from "@upstash/redis";
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
-/* Health check */
-app.get("/", (req, res) => {
-  res.status(200).send("OK - study-planner-mcp running");
-});
+/** 1) MCP server */
+const server = new McpServer({ name: "study-planner-mcp", version: "1.0.0" });
 
-/* 1️⃣ MCP Server */
-const server = new McpServer({
-  name: "study-planner-mcp",
-  version: "1.0.0",
-});
-
-/* 2️⃣ 👉 TOOL بتاعتك */
+/** 2) ✅ Tool بتاعتك فقط */
 server.tool(
   "get_curriculum",
-  {
-    yearId: z.string(),
-  },
-  async ({ yearId }) => {
+  { yearid: z.string() },
+  async ({ yearid }) => {
     return {
       content: [
         {
           type: "text",
-          text: `📚 Curriculum for year ${yearId}:\n- Math\n- Arabic\n- English`,
+          text: `📚 المنهج الدراسي للسنة: ${yearid}\n- Math\n- Arabic\n- English`,
         },
       ],
       structuredContent: {
-        yearId,
+        yearid,
         subjects: ["Math", "Arabic", "English"],
       },
     };
   }
 );
 
-/* 3️⃣ Transport الصح */
-const transport = new HTTPServerTransport({
-  server,
-  endpoint: "/mcp",
-});
+/** 3) Transport (زي الشغال عندك) */
+const transport = new StreamableHTTPServerTransport({});
 
-/* 4️⃣ MCP endpoint */
-app.post("/mcp", async (req, res) => {
+/** 4) Routes */
+app.get("/", (_req, res) => res.status(200).send("HELLO FROM CLOUD RUN"));
+
+app.all("/mcp", async (req, res) => {
   try {
-    await transport.handleRequest(req, res);
+    await transport.handleRequest(req, res, req.body);
   } catch (err) {
-    console.error("MCP error:", err);
+    console.error("handleRequest error:", err);
     if (!res.headersSent) {
-      res.status(500).json({ ok: false, error: String(err) });
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
     }
   }
 });
 
-/* 5️⃣ Listen */
-const PORT = Number(process.env.PORT || 8080);
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on ${PORT}`);
+/** 5) Listen */
+const port = Number(process.env.PORT || 8080);
 
-  server
-    .connect(transport)
-    .then(() => console.log("✅ MCP connected"))
-    .catch(console.error);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Listening on ${port}`);
 });
+
+/** 6) Connect MCP */
+server
+  .connect(transport)
+  .then(() => console.log("MCP server connected ✅"))
+  .catch((err) => console.error("MCP connect error:", err));
