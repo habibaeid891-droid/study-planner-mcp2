@@ -10,7 +10,7 @@ import {
 const app = express();
 app.use(express.json());
 
-/* MCP Server */
+/* MCP Server edit*/
 const server = new McpServer({
   name: "study-planner-mcp",
   version: "1.0.0",
@@ -52,3 +52,4 @@ app.listen(PORT, () => {
 
 /* Connect MCP */
 await server.connect(transport);
+
