@@ -1,30 +1,69 @@
 import express from "express";
-import { McpServer } from "@modelcontextprotocol/sdk/server";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
+import { z } from "zod";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { HTTPServerTransport } from "@modelcontextprotocol/sdk/server/http.js";
 
 const app = express();
 app.use(express.json());
 
+/* Health check */
 app.get("/", (req, res) => {
-  res.send("HELLO FROM CLOUD RUN");
+  res.status(200).send("OK - study-planner-mcp running");
 });
 
+/* 1️⃣ MCP Server */
 const server = new McpServer({
   name: "study-planner-mcp",
   version: "1.0.0",
 });
 
-const transport = new StreamableHTTPServerTransport({ server });
+/* 2️⃣ 👉 TOOL بتاعتك */
+server.tool(
+  "get_curriculum",
+  {
+    yearId: z.string(),
+  },
+  async ({ yearId }) => {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📚 Curriculum for year ${yearId}:\n- Math\n- Arabic\n- English`,
+        },
+      ],
+      structuredContent: {
+        yearId,
+        subjects: ["Math", "Arabic", "English"],
+      },
+    };
+  }
+);
 
-app.post("/mcp", async (req, res) => {
-  await transport.handleRequest(req, res);
+/* 3️⃣ Transport الصح */
+const transport = new HTTPServerTransport({
+  server,
+  endpoint: "/mcp",
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log("🚀 Server running on", PORT);
+/* 4️⃣ MCP endpoint */
+app.post("/mcp", async (req, res) => {
+  try {
+    await transport.handleRequest(req, res);
+  } catch (err) {
+    console.error("MCP error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  }
+});
 
-  server.connect(transport)
+/* 5️⃣ Listen */
+const PORT = Number(process.env.PORT || 8080);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on ${PORT}`);
+
+  server
+    .connect(transport)
     .then(() => console.log("✅ MCP connected"))
     .catch(console.error);
 });
