@@ -11,6 +11,30 @@ const server = new McpServer({
   name: "study-planner-mcp",
   version: "1.0.0",
 });
+const TEMP_CURRICULUM = {
+  yearId: "year_1_secondary",
+  yearName: "الصف الأول الثانوي",
+  subjects: [
+    {
+      subjectId: "arabic",
+      name: "اللغة العربية",
+      lessons: [
+        { lessonId: "ar_l1", title: "النحو: الجملة الاسمية والفعلية" },
+        { lessonId: "ar_l2", title: "البلاغة: التشبيه" },
+        { lessonId: "ar_l3", title: "القراءة: نصوص أدبية" }
+      ]
+    },
+    {
+      subjectId: "english",
+      name: "اللغة الإنجليزية",
+      lessons: [
+        { lessonId: "en_l1", title: "Grammar: Tenses Review" },
+        { lessonId: "en_l2", title: "Reading Comprehension" },
+        { lessonId: "en_l3", title: "Writing: Paragraph Writing" }
+      ]
+    }
+  ]
+};
 
 /** Tool: load_curriculum (TEMP fake, بس عشان السيرفر يقوم) */
 server.tool(
@@ -95,4 +119,5 @@ app.listen(port, "0.0.0.0", () => {
 server.connect(transport).then(() => {
   console.log("MCP connected ✅");
 });
+
 
