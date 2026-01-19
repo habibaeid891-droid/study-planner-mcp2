@@ -2,6 +2,12 @@ import express from "express";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import admin from "firebase-admin";
+
+admin.initializeApp({
+  credential: admin.credential.applicationDefault(),
+  storageBucket: "ai-students-85242.appspot.com",
+});
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -11,95 +17,55 @@ const server = new McpServer({
   name: "study-planner-mcp",
   version: "1.0.0",
 });
-const TEMP_CURRICULUM = {
-  yearId: "year_1_secondary",
-  yearName: "الصف الأول الثانوي",
-  subjects: [
-    {
-      subjectId: "arabic",
-      name: "اللغة العربية",
-      lessons: [
-        { lessonId: "ar_l1", title: "النحو: الجملة الاسمية والفعلية" },
-        { lessonId: "ar_l2", title: "البلاغة: التشبيه" },
-        { lessonId: "ar_l3", title: "القراءة: نصوص أدبية" }
-      ]
-    },
-    {
-      subjectId: "english",
-      name: "اللغة الإنجليزية",
-      lessons: [
-        { lessonId: "en_l1", title: "Grammar: Tenses Review" },
-        { lessonId: "en_l2", title: "Reading Comprehension" },
-        { lessonId: "en_l3", title: "Writing: Paragraph Writing" }
-      ]
-    }
-  ]
-};
 
-/** Tool: load_curriculum (TEMP fake, بس عشان السيرفر يقوم) */
+/** Tool 1: load_curriculum from Firebase */
 server.tool(
   "load_curriculum",
   { yearId: z.string() },
   async ({ yearId }) => {
-    return {
-      content: [{ type: "text", text: "📘 Curriculum loaded (TEMP)" }],
-      structuredContent: {
-        yearId,
-        subjects: [],
-      },
-    };
-  }
-);
-server.tool(
-  "generate_schedule_preview",
-  {
-    daysPerWeek: z.number().int().min(1).max(7),
-    lessonsPerDay: z.number().int().min(1).max(5),
-  },
-  async ({ daysPerWeek, lessonsPerDay }) => {
-    const schedule = [];
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(`curriculums/${yearId}.json`);
 
-    let lessonCounter = 1;
-
-    for (let day = 1; day <= daysPerWeek; day++) {
-      const dayLessons = [];
-
-      for (let i = 0; i < lessonsPerDay; i++) {
-        dayLessons.push({
-          lessonId: `lesson_${lessonCounter}`,
-          title: `درس رقم ${lessonCounter}`,
-        });
-        lessonCounter++;
-      }
-
-      schedule.push({
-        day,
-        lessons: dayLessons,
-      });
+    const [exists] = await file.exists();
+    if (!exists) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: "❌ المنهج غير موجود" }],
+      };
     }
 
+    const [buffer] = await file.download();
+    const curriculum = JSON.parse(buffer.toString());
+
     return {
-      content: [
-        {
-          type: "text",
-          text: "📅 تم إنشاء جدول مبدئي (Preview)",
-        },
-      ],
-      structuredContent: {
-        daysPerWeek,
-        lessonsPerDay,
-        schedule,
-      },
+      content: [{ type: "text", text: "📘 تم تحميل المنهج بنجاح" }],
+      structuredContent: curriculum,
     };
   }
 );
+
+/** Tool 2: generate schedule from curriculum */
 server.tool(
   "generate_schedule_from_curriculum",
   {
+    curriculum: z.object({
+      yearId: z.string(),
+      subjects: z.array(
+        z.object({
+          name: z.string(),
+          lessons: z.array(
+            z.object({
+              lessonId: z.string(),
+              title: z.string(),
+            })
+          ),
+        })
+      ),
+    }),
     lessonsPerDay: z.number().int().min(1).max(5),
   },
-  async ({ lessonsPerDay }) => {
-    const allLessons = TEMP_CURRICULUM.subjects.flatMap((s) =>
+  async ({ curriculum, lessonsPerDay }) => {
+    const allLessons = curriculum.subjects.flatMap((s) =>
       s.lessons.map((l) => ({
         subject: s.name,
         lessonId: l.lessonId,
@@ -121,11 +87,9 @@ server.tool(
     }
 
     return {
-      content: [
-        { type: "text", text: "📅 جدول مبدئي مبني على المنهج" }
-      ],
+      content: [{ type: "text", text: "📅 جدول مبني على المنهج" }],
       structuredContent: {
-        yearId: TEMP_CURRICULUM.yearId,
+        yearId: curriculum.yearId,
         schedule,
       },
     };
@@ -157,6 +121,3 @@ app.listen(port, "0.0.0.0", () => {
 server.connect(transport).then(() => {
   console.log("MCP connected ✅");
 });
-
-
-
