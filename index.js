@@ -2,12 +2,6 @@ import express from "express";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import admin from "firebase-admin";
-
-admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
-  storageBucket: "ai-students-85242.appspot.com",
-});
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -18,115 +12,73 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-/** Tool 1: load_curriculum from Firebase */
+/** Tool 1: Example tool */
 server.tool(
-  "load_curriculum",
-  { yearId: z.string() },
-  async ({ yearId }) => {
-    const bucket = admin.storage().bucket();
-    const file = bucket.file(`curriculums/${yearId}.json`);
-
-    const [exists] = await file.exists();
-    if (!exists) {
-      return {
-        isError: true,
-        content: [{ type: "text", text: "❌ المنهج غير موجود" }],
-      };
-    }
-
-    const [buffer] = await file.download();
-    const curriculum = JSON.parse(buffer.toString());
-
+  "test_tool",
+  { name: z.string() },
+  async ({ name }) => {
     return {
-      content: [{ type: "text", text: "📘 تم تحميل المنهج بنجاح" }],
-      structuredContent: curriculum,
-    };
-  }
-);
-
-/** Tool 2: generate schedule from curriculum */
-server.tool(
-  "generate_schedule_from_curriculum",
-  {
-    curriculum: z.object({
-      yearId: z.string(),
-      subjects: z.array(
-        z.object({
-          name: z.string(),
-          lessons: z.array(
-            z.object({
-              lessonId: z.string(),
-              title: z.string(),
-            })
-          ),
-        })
-      ),
-    }),
-    lessonsPerDay: z.number().int().min(1).max(5),
-  },
-  async ({ curriculum, lessonsPerDay }) => {
-    const allLessons = curriculum.subjects.flatMap((s) =>
-      s.lessons.map((l) => ({
-        subject: s.name,
-        lessonId: l.lessonId,
-        title: l.title,
-      }))
-    );
-
-    const schedule = [];
-    let index = 0;
-    let day = 1;
-
-    while (index < allLessons.length) {
-      schedule.push({
-        day,
-        lessons: allLessons.slice(index, index + lessonsPerDay),
-      });
-      index += lessonsPerDay;
-      day++;
-    }
-
-    return {
-      content: [{ type: "text", text: "📅 جدول مبني على المنهج" }],
-      structuredContent: {
-        yearId: curriculum.yearId,
-        schedule,
-      },
+      content: [{ 
+        type: "text", 
+        text: `Hello ${name} from Study Planner MCP!` 
+      }],
     };
   }
 );
 
 /** Routes */
-app.get("/", (_req, res) => res.status(200).send("HELLO FROM CLOUD RUN"));
+app.get("/", (_req, res) => {
+  console.log("Root endpoint called");
+  res.status(200).send("HELLO FROM STUDY PLANNER MCP");
+});
 
+app.get("/health", (_req, res) => {
+  console.log("Health check called");
+  res.status(200).json({ 
+    status: "healthy", 
+    timestamp: new Date().toISOString(),
+    service: "study-planner-mcp"
+  });
+});
+
+// Handle MCP requests
 app.all("/mcp", async (req, res) => {
+  console.log("MCP endpoint called", req.method);
+  
   try {
     const transport = new StreamableHTTPServerTransport({});
+    await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false });
+  } catch (error) {
+    console.error("MCP error:", error);
+    res.status(500).json({ 
+      error: "MCP server error", 
+      message: error.message 
+    });
   }
+});
+
+// Handle 404
+app.use((_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Error handling middleware
+app.use((error, _req, res, _next) => {
+  console.error("Server error:", error);
+  res.status(500).json({ 
+    error: "Internal server error", 
+    message: error.message 
+  });
 });
 
 /** Start the server */
 const port = Number(process.env.PORT || 8080);
 
-async function startServer() {
-  try {
-    /** Connect MCP */
-    const transport = new StreamableHTTPServerTransport({});
-    await server.connect(transport);
-    console.log("MCP connected ✅");
-    
-    /** Start Express server */
-    app.listen(port, "0.0.0.0", () => {
-      console.log("Server listening on", port);
-    });
-  } catch (error) {
-    console.error("Failed to start server:", error);
-    process.exit(1);
-  }
-}
-
-startServer();
+app.listen(port, "0.0.0.0", () => {
+  console.log(`✅ Server started successfully on port ${port}`);
+  console.log(`✅ Available endpoints:`);
+  console.log(`   - GET  http://localhost:${port}/`);
+  console.log(`   - GET  http://localhost:${port}/health`);
+  console.log(`   - ALL  http://localhost:${port}/mcp`);
+});
