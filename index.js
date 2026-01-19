@@ -96,14 +96,12 @@ server.tool(
   }
 );
 
-/** Transport */
-const transport = new StreamableHTTPServerTransport({});
-
 /** Routes */
 app.get("/", (_req, res) => res.status(200).send("HELLO FROM CLOUD RUN"));
 
 app.all("/mcp", async (req, res) => {
   try {
+    const transport = new StreamableHTTPServerTransport({});
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
     console.error(err);
@@ -111,13 +109,24 @@ app.all("/mcp", async (req, res) => {
   }
 });
 
-/** Listen */
+/** Start the server */
 const port = Number(process.env.PORT || 8080);
-app.listen(port, "0.0.0.0", () => {
-  console.log("Listening on", port);
-});
 
-/** Connect MCP */
-server.connect(transport).then(() => {
-  console.log("MCP connected ✅");
-});
+async function startServer() {
+  try {
+    /** Connect MCP */
+    const transport = new StreamableHTTPServerTransport({});
+    await server.connect(transport);
+    console.log("MCP connected ✅");
+    
+    /** Start Express server */
+    app.listen(port, "0.0.0.0", () => {
+      console.log("Server listening on", port);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+startServer();
